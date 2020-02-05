@@ -49,6 +49,30 @@ function get_api_caller(map) {
 
 // ------------------------------------------------ CORE
 
+app.get('/',function(req, res) {
+    let api_map = get_api_map()
+
+    let api_show = {}
+
+    for(let api_name in api_map) {
+        let http_methods = api_map[api_name].methods
+        api_show[api_name] = {}
+        for(let http_method in  http_methods) {
+            let methods = http_methods[http_method]
+            for(let method in methods) {
+                api_show[api_name][method] = {
+                    http_method:http_method,
+                    args:methods[method].args
+                }
+            }
+        }
+    }
+
+    res.json({apis:api_show})
+})
+
+// ---------
+
 app.all('/*',function(req, res) {
 
     let api_map = get_api_map()
