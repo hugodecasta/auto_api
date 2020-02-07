@@ -3,12 +3,16 @@
 const fs = require('fs')
 const express = require('express')
 const logger = require('log-to-file')
+const FastAuth = require('fast_auth')
+const bodyParser = require('body-parser')
 
 // ---------------------------------------------- VARS
 
 const app = express()
 const port = process.argv[2] || 8080
 const api_map_path = process.argv[3] || './api_map.json'
+const auth_dir = process.argv[4] || './auth_data'
+const fast_auth = new FastAuth(auth_dir)
 
 function log() {
     let str = Array.from(arguments).join(' ')
@@ -19,16 +23,10 @@ function log() {
 
 // ------------------------------------------------ CONFIG
 
-const bodyParser = require('body-parser')
 app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({extended: true})); 
+app.use(bodyParser.urlencoded({extended: true}))
 
 // ------------------------------------------------ FUNCTION
-
-function get_api_map() {
-    let api_map = JSON.parse(fs.readFileSync(api_map_path,'utf8'))
-    return api_map
-}
 
 function get_api_caller(map) {
 
@@ -41,16 +39,69 @@ function get_api_caller(map) {
             let args = map.obj.args
             let constructor = exp_class_name==''?api_module:api_module[exp_class_name]
             return new constructor(...args)
+        },
+        'meth':function() {
+            return api_module
         }
     }
 
     return types[caller_type]()
 }
 
-// ------------------------------------------------ CORE
+function get_token_rights(token) {
+    let token_data = fast_auth.get_token_data(token)
+    if(token_data == null) {
+        return null
+    }
+    return token_data.data()
+}
 
-app.get('/',function(req, res) {
-    let api_map = get_api_map()
+function get_api_map(token) {
+    let api_rights = get_token_rights(token)
+    if(api_rights == null) {
+        return null
+    }
+    let full_api_map = JSON.parse(fs.readFileSync(api_map_path,'utf8'))
+    let api_map = {}
+    for(let api_name in api_rights) {
+        let right = api_rights[api_name]
+        if(right.life > 0) {
+            api_map[api_name] = full_api_map[api_name]
+        } else {
+            api_map[api_name] = null
+        }
+    }
+    return api_map
+}
+
+// ------------------------------------------------ AUTH
+
+app.post('/auth/connect',function(req,res) {
+    let key = req.body['key']
+    if(fast_auth.get_key_data(key) == null) {
+        res.status(400)
+        res.json('incorrect api key')
+        return
+    }
+    let date = new Date()
+    date.setHours(23,59,00,00)
+    let this_night = Date.now()+100000*1000//date.getTime()
+    let token = fast_auth.get_token(key,this_night)
+    res.json(token)
+})
+
+// --------- GET ALL
+
+app.get('/:token',function(req, res) {
+
+    let token = req.params['token']
+
+    let api_map = get_api_map(token)
+    if(api_map == null) {
+        res.status(400)
+        res.json('incorrect api token')
+        return 
+    }
 
     let api_show = {}
 
@@ -68,19 +119,23 @@ app.get('/',function(req, res) {
         }
     }
 
-    res.json({apis:api_show})
+    res.json(api_show)
 })
+
+// ------------------------------------------------ CORE
 
 // ---------
 
 app.all('/*',function(req, res) {
 
-    let api_map = get_api_map()
-
     // --- DATA
     
     let path_sp = req.params[0].split('/')
-    let api = path_sp[0]
+    let auth_token = path_sp[0]
+
+    let api_map = get_api_map(auth_token)
+
+    let api = path_sp[1]
 
     // --- DATA
 
@@ -99,7 +154,7 @@ app.all('/*',function(req, res) {
         if(http_method in map.methods) {
 
             let http_method_map = map.methods[http_method]
-            let params = path_sp.slice(1)
+            let params = path_sp.slice(2)
     
             let called_method = params[0]
 
