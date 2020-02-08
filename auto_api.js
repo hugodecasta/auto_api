@@ -65,7 +65,7 @@ function get_api_map(token) {
     let api_map = {}
     for(let api_name in api_rights) {
         let right = api_rights[api_name]
-        if(right.life > 0) {
+        if(right.life-right.price >= 0) {
             api_map[api_name] = full_api_map[api_name]
         } else {
             api_map[api_name] = null
@@ -74,10 +74,31 @@ function get_api_map(token) {
     return api_map
 }
 
+function get_key(req) {
+    if(!('auth-key' in req.headers)) {
+        return null
+    }
+    return req.header('auth-key')
+}
+
+function get_token(req) {
+    if(!('auth-token' in req.headers)) {
+        return null
+    }
+    return req.header('auth-token')
+}
+
 // ------------------------------------------------ AUTH
 
-app.post('/auth/connect',function(req,res) {
-    let key = req.body['key']
+app.all('/auth/connect',function(req,res) {
+
+    let key = get_key(req)
+    if(key == null) {
+        res.status(400)
+        res.send('missing key header')
+        return
+    }
+
     if(fast_auth.get_key_data(key) == null) {
         res.status(400)
         res.json('incorrect api key')
@@ -92,9 +113,14 @@ app.post('/auth/connect',function(req,res) {
 
 // --------- GET ALL
 
-app.get('/:token',function(req, res) {
+app.all('/',function(req, res) {
 
-    let token = req.params['token']
+    let token = get_token(req)
+    if(token == null) {
+        res.status(400)
+        res.send('missing token header')
+        return
+    }
 
     let api_map = get_api_map(token)
     if(api_map == null) {
@@ -106,8 +132,12 @@ app.get('/:token',function(req, res) {
     let api_show = {}
 
     for(let api_name in api_map) {
-        let http_methods = api_map[api_name].methods
         api_show[api_name] = {}
+        if(api_map[api_name] == null) {
+            api_show[api_name] = 'no more credits'
+            continue
+        }
+        let http_methods = api_map[api_name].methods
         for(let http_method in  http_methods) {
             let methods = http_methods[http_method]
             for(let method in methods) {
@@ -129,13 +159,23 @@ app.get('/:token',function(req, res) {
 app.all('/*',function(req, res) {
 
     // --- DATA
+
+    let token = get_token(req)
+    if(token == null) {
+        res.status(400)
+        res.send('missing token header')
+        return
+    }
+
+    let api_map = get_api_map(token)
+    if(api_map == null) {
+        res.status(400)
+        res.json('incorrect api token')
+        return 
+    }
     
     let path_sp = req.params[0].split('/')
-    let auth_token = path_sp[0]
-
-    let api_map = get_api_map(auth_token)
-
-    let api = path_sp[1]
+    let api = path_sp[0]
 
     // --- DATA
 
@@ -150,55 +190,64 @@ app.all('/*',function(req, res) {
         text = 'api "'+api+'" not found !'
     } else {
         let map = api_map[api]
-        let http_method = req.method.toLowerCase()
-        if(http_method in map.methods) {
+        if(map == null) {
+            status = 400
+            text = 'no more credits'
+        } else  {
+            let http_method = req.method.toLowerCase()
+            if(http_method in map.methods) {
 
-            let http_method_map = map.methods[http_method]
-            let params = path_sp.slice(2)
-    
-            let called_method = params[0]
+                let http_method_map = map.methods[http_method]
+                let params = path_sp.slice(1)
+        
+                let called_method = params[0]
 
-            if(called_method in http_method_map) {
-                let method_map = http_method_map[called_method]
-                let method_name = method_map.name
-                let arg_names = method_map.args
+                if(called_method in http_method_map) {
+                    let method_map = http_method_map[called_method]
+                    let method_name = method_map.name
+                    let arg_names = method_map.args
 
-                let args = []
-                let get_param = null
-                let req_body = req.body
-                if(http_method == 'get') {
-                    get_param = function(name) {
-                        return params.pop()
+                    let args = []
+                    let get_param = null
+                    let req_body = req.body
+                    if(http_method == 'get') {
+                        get_param = function(name) {
+                            return params.pop()
+                        }
+                    } else {
+                        get_param = function(name) {
+                            return req_body[name]
+                        }
                     }
+                    for(let arg_name of arg_names) {
+                        args.push(get_param(arg_name))
+                    }
+
+                    try {
+                        let tdata = fast_auth.get_token_data(token)
+                        let api_token_map = tdata.get_data(api)
+                        api_token_map.life = api_token_map.life - api_token_map.price
+                        tdata.set_data(api,api_token_map)
+                        log('try calling '+method_name)
+                        let caller = get_api_caller(map)
+                        response = caller[method_name](...args)
+                        log('success')
+                    } catch(err) {
+                        log('api error:'+err.name+' - '+err.message)
+                        status = 500
+                        text = 'api error '+err.name+' - '+err.message
+                    }
+
                 } else {
-                    get_param = function(name) {
-                        return req_body[name]
-                    }
+                    status = 400
+                    text = 'wrong api method'
                 }
-                for(let arg_name of arg_names) {
-                    args.push(get_param(arg_name))
-                }
-
-                try {
-                    log('try calling '+method_name)
-                    let caller = get_api_caller(map)
-                    response = caller[method_name](...args)
-                    log('success')
-                } catch(err) {
-                    log('api error:'+err.name+' - '+err.message)
-                    status = 500
-                    text = 'api error '+err.name+' - '+err.message
-                }
+                
 
             } else {
                 status = 400
-                text = 'wrong api method'
+                text = 'wrong http method'
             }
-            
-
-        } else {
-            status = 400
-            text = 'wrong http method'
         }
 
     }
