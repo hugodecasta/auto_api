@@ -1,6 +1,7 @@
 // ---------------------------------------------- REQUIRES
 
 const fs = require('fs')
+const cors = require('cors')
 const express = require('express')
 const logger = require('log-to-file')
 const FastAuth = require('fast_auth')
@@ -17,7 +18,7 @@ const fast_auth = new FastAuth(auth_dir)
 function log() {
     let str = Array.from(arguments).join(' ')
     logger(str,__dirname+'log.log')
-    logger('[API] - '+str,'log.log')
+    logger('[API] - '+str,'/log.log')
     console.log(...arguments)
 }
 
@@ -25,6 +26,7 @@ function log() {
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: true}))
+app.use(cors())
 
 // ------------------------------------------------ FUNCTION
 
@@ -159,6 +161,8 @@ app.all('/',function(req, res) {
 app.all('/*',function(req, res) {
 
     // --- DATA
+    
+    res.status(200)
 
     let token = get_token(req)
     if(token == null) {
@@ -179,7 +183,7 @@ app.all('/*',function(req, res) {
 
     // --- DATA
 
-    let response = null
+    let result = null
     let status = 200
     let text = ''
 
@@ -230,12 +234,17 @@ app.all('/*',function(req, res) {
                         tdata.set_data(api,api_token_map)
                         log('try calling '+method_name)
                         let caller = get_api_caller(map)
-                        response = caller[method_name](...args)
+                        result = caller[method_name](...args)
                         log('success')
                     } catch(err) {
-                        log('api error:'+err.name+' - '+err.message)
+                        let err_str = 'api error:'+err.name+' - '+err.message
+                        err_str += ' - '+JSON.stringify(method_name)
+                        err_str += ' - '+JSON.stringify(req_body)
+                        err_str += ' - '+JSON.stringify(req.params[0])
+                        err_str += ' - '+JSON.stringify(args)
+                        log(err_str)
                         status = 500
-                        text = 'api error '+err.name+' - '+err.message
+                        text = err_str
                     }
 
                 } else {
@@ -254,7 +263,7 @@ app.all('/*',function(req, res) {
 
     // --- RETURN
 
-    res.json({response,status,text})
+    res.json({result,status,text})
 
 })
 
