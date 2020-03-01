@@ -50,6 +50,17 @@ function get_api_caller(map) {
     return types[caller_type]()
 }
 
+function get_free_api() {
+    let full_api_map = JSON.parse(fs.readFileSync(api_map_path,'utf8'))
+    let map = {}
+    for(let api_name in full_api_map){
+        if(!full_api_map[api_name].need_token) {
+            map[api_name] = full_api_map[api_name]
+        }
+    }
+    return map
+}
+
 function get_token_rights(token) {
     let token_data = fast_auth.get_token_data(token)
     if(token_data == null) {
@@ -59,12 +70,16 @@ function get_token_rights(token) {
 }
 
 function get_api_map(token) {
+
+    let api_map = get_free_api()
     let api_rights = get_token_rights(token)
     if(api_rights == null) {
+        if(token == 'notoken') {
+            return api_map
+        }
         return null
     }
     let full_api_map = JSON.parse(fs.readFileSync(api_map_path,'utf8'))
-    let api_map = {}
     for(let api_name in api_rights) {
         let right = api_rights[api_name]
         if(right.life-right.price >= 0) {
@@ -223,15 +238,17 @@ app.all('/*',function(req, res) {
                             return req_body[name]
                         }
                     }
-                    for(let arg_name of arg_names) {
+                    for(let arg_name in arg_names) {
                         args.push(get_param(arg_name))
                     }
 
                     try {
-                        let tdata = fast_auth.get_token_data(token)
-                        let api_token_map = tdata.get_data(api)
-                        api_token_map.life = api_token_map.life - api_token_map.price
-                        tdata.set_data(api,api_token_map)
+                        if(map.need_token) {
+                            let tdata = fast_auth.get_token_data(token)
+                            let api_token_map = tdata.get_data(api)
+                            api_token_map.life = api_token_map.life - api_token_map.price
+                            tdata.set_data(api,api_token_map)
+                        }
                         log('try calling '+method_name)
                         let caller = get_api_caller(map)
                         result = caller[method_name](...args)

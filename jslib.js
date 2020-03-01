@@ -1,6 +1,6 @@
 'use strict'
 
-var api = {};
+var api = {is_connected:false};
 
 (async function() {
     
@@ -69,9 +69,16 @@ var api = {};
                 let http_method = meth.http_method.toUpperCase()
                 let args = meth.args
                 let func = async function() {
+                    let given_args = Array.from(arguments)
                     let data = {}
-                    for(let index in args) {
-                        data[args[index]] = Array.from(arguments)[index]
+                    let gid = 0
+                    for(let arg_name in args) {
+                        let value = args[arg_name]
+                        if(value == '@user') {
+                            value = given_args[gid]
+                            gid++
+                        }
+                        data[arg_name] = value
                     }
                     let resp = await send('/'+api_name+'/'+meth_name,'json',http_method,data,{'auth-token':gtoken})
                     if(resp.response.status != 200) {
@@ -86,12 +93,15 @@ var api = {};
 
     // --------------------------------------------
 
-    api.connect = async function(host,key) {
+    async function connect(host,key=null) {
+        api = {is_connected:false,connect}
         ghost = host
         gkey = key
-        gtoken = await get_token()
+        gtoken = key==null?'notoken':await get_token()
         prepare_apis(await get_api_map())
+        api.is_connected = true
     }
+    api.connect = connect
 
     // --------------------------------------------
 
