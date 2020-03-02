@@ -63,6 +63,10 @@ var api = {is_connected:false};
 
     function prepare_apis(api_map) {
         for(let api_name in api_map) {
+            if(api_map[api_name] == null) {
+                api[api_name] = null
+                continue
+            }
             api[api_name] = {}
             for(let meth_name in api_map[api_name]) {
                 let meth = api_map[api_name][meth_name]
