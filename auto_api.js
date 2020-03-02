@@ -81,6 +81,9 @@ function get_api_map(token) {
     }
     let full_api_map = JSON.parse(fs.readFileSync(api_map_path,'utf8'))
     for(let api_name in api_rights) {
+        if(!(api_name in full_api_map)) {
+            continue
+        }
         let right = api_rights[api_name]
         if(right.life-right.price >= 0) {
             api_map[api_name] = full_api_map[api_name]
