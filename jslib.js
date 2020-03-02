@@ -63,7 +63,7 @@ var api = {is_connected:false};
 
     function prepare_apis(api_map) {
         for(let api_name in api_map) {
-            if(api_map[api_name] == null) {
+            if(typeof api_map[api_name] != 'object') {
                 api[api_name] = null
                 continue
             }
