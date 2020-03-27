@@ -34,17 +34,25 @@ api_map example (api to generate html colored text):
         "get": {
           "print": {
             "name":"print",
-            "args":["color","text"]
+            "args":{
+              "text":"@user",
+              "color":"@user"
+            }
           },
           "shout": {
-            "name":"shouter",
-            "args":["text"]
+            "name":"print",
+            "args":{
+              "text":"@user",
+              "color":"#f00"
+            }
           }
         },
         "post": {
           "set_font": {
             "name":"font",
-            "args":["font"]
+            "args":{
+              "font":"@user"
+            }
           }
         }
       }
@@ -58,8 +66,8 @@ In this example, we declare an new api `my_api`.
    
  * the only 2 callable http method are `GET` and `POST`
    * 2 methods can be called on get
-     * `"print"` (which real name in the module object is `"print"`) callable with 2 argument.
-     * `"shout"` (which real name in the module object is `"shouter"`) callable with 1 argument.
+     * `"print"` (which real name in the module object is `"print"`) callable with 2 argument (2 arguments given by the calling user).
+     * `"shout"` (which real name in the module object is `"shouter"`) callable with 1 argument (one argument is given by the system).
    * 1 method can be called on post
      * `"set_font"` (which real name in the module object is `"font"`) callable with 1 argument.
 
